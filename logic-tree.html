@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Logic Tree</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Helvetica Neue', Arial, sans-serif;
+    background: #f4f4f0;
+    color: #1a1a1a;
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 48px;
+    background: #1a1a1a;
+    color: #f4f4f0;
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 12px;
+    z-index: 200;
+  }
+
+  header h1 {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-right: 8px;
+  }
+
+  header .divider {
+    width: 1px;
+    height: 20px;
+    background: rgba(255,255,255,0.2);
+  }
+
+  header .spacer { flex: 1; }
+
+  header button {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #f4f4f0;
+    padding: 5px 14px;
+    border-radius: 3px;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  header button:hover { background: rgba(255,255,255,0.12); }
+
+  header .hint {
+    font-size: 11px;
+    color: rgba(255,255,255,0.4);
+    letter-spacing: 0.03em;
+  }
+
+  /* ── Canvas ── */
+  #canvas {
+    position: fixed;
+    top: 48px; left: 0; right: 0; bottom: 0;
+    overflow: hidden;
+  }
+
+  #canvas-inner {
+    position: absolute;
+    top: 0; left: 0;
+    width: 0; height: 0;
+    transform-origin: 0 0;
+  }
+
+  #svg-layer {
+    position: absolute;
+    top: -2000px; left: -2000px;
+    width: 6000px; height: 6000px;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  /* ── Nodes ── */
+  .node {
+    position: absolute;
+    background: #ffffff;
+    border: 1.5px solid #d8d8d4;
+    border-radius: 5px;
+    padding: 10px 14px;
+    min-width: 120px;
+    max-width: 240px;
+    cursor: grab;
+    user-select: none;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    transition: box-shadow 0.12s, border-color 0.12s;
+  }
+
+  .node:hover {
+    box-shadow: 0 3px 10px rgba(0,0,0,0.10);
+    border-color: #b0b0aa;
+  }
+
+  .node.root {
+    border-color: #1a1a1a;
+    border-width: 2px;
+    background: #fefefe;
+  }
+
+  .node.dragging {
+    cursor: grabbing;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.16);
+    z-index: 1000;
+    border-color: #888;
+  }
+
+  .node-text {
+    font-size: 13px;
+    line-height: 1.5;
+    word-break: break-word;
+    min-height: 1.5em;
+  }
+
+  .node-actions {
+    display: none;
+    position: absolute;
+    top: -11px;
+    right: -4px;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .node:hover .node-actions { display: flex; }
+
+  .node-actions button {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 1px solid #ddd;
+    background: white;
+    font-size: 11px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    transition: background 0.12s, border-color 0.12s;
+  }
+
+  .btn-add { color: #2d7a2d; }
+  .btn-add:hover { background: #2d7a2d; color: white; border-color: #2d7a2d; }
+
+  .btn-del { color: #b03030; }
+  .btn-del:hover { background: #b03030; color: white; border-color: #b03030; }
+
+  .node-edit {
+    width: 100%;
+    border: none;
+    outline: none;
+    font-size: 13px;
+    font-family: inherit;
+    background: transparent;
+    resize: none;
+    line-height: 1.5;
+    display: block;
+    min-height: 1.5em;
+  }
+
+  /* ── Empty State ── */
+  #empty-state {
+    position: fixed;
+    top: 48px; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    pointer-events: none;
+  }
+
+  #empty-state p {
+    font-size: 14px;
+    color: #aaa;
+    letter-spacing: 0.04em;
+  }
+
+  #empty-state button {
+    background: #1a1a1a;
+    color: #f4f4f0;
+    border: none;
+    padding: 10px 22px;
+    border-radius: 4px;
+    font-size: 13px;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    pointer-events: all;
+    transition: background 0.15s;
+  }
+
+  #empty-state button:hover { background: #333; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Logic Tree</h1>
+  <div class="divider"></div>
+  <span class="hint">ダブルクリックで編集 &nbsp;／&nbsp; ホバーで追加・削除</span>
+  <div class="spacer"></div>
+  <button onclick="addRootNode()">+ ルート追加</button>
+  <button onclick="autoLayout()">自動整列</button>
+  <button onclick="clearAll()">クリア</button>
+</header>
+
+<div id="canvas">
+  <div id="canvas-inner">
+    <svg id="svg-layer"></svg>
+  </div>
+</div>
+
+<div id="empty-state">
+  <p>ロジックツリーを始めましょう</p>
+  <button onclick="addRootNode()">+ ルートノードを追加</button>
+</div>
+
+<script>
+// ════════════════════════════════════════════
+//  State
+// ════════════════════════════════════════════
+let nodes = {};
+let nextId = 1;
+
+// Canvas pan / zoom
+let pan = { x: 60, y: 60 };
+let scale = 1;
+
+// Drag node
+let drag = null;   // { nodeId, offsetX, offsetY }
+
+const canvas     = document.getElementById('canvas');
+const inner      = document.getElementById('canvas-inner');
+const svgLayer   = document.getElementById('svg-layer');
+
+// ════════════════════════════════════════════
+//  Canvas transform
+// ════════════════════════════════════════════
+function applyPan() {
+  inner.style.transform = `translate(${pan.x}px, ${pan.y}px) scale(${scale})`;
+  inner.style.transformOrigin = '0 0';
+}
+
+// ════════════════════════════════════════════
+//  Mouse Events
+// ════════════════════════════════════════════
+document.addEventListener('mousemove', e => {
+  if (!drag) return;
+  const node = nodes[drag.nodeId];
+  node.x = (e.clientX - pan.x) / scale - drag.offsetX;
+  node.y = (e.clientY - pan.y) / scale - drag.offsetY;
+  positionNode(drag.nodeId);
+  drawConnections();
+});
+
+document.addEventListener('mouseup', () => {
+  if (!drag) return;
+  const el = document.getElementById('node-' + drag.nodeId);
+  if (el) el.classList.remove('dragging');
+  drag = null;
+  save();
+});
+
+// トラックパッド：2本指スクロール＝パン、ピンチ＝ズーム
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  if (e.ctrlKey) {
+    // ピンチズーム：カーソル位置を中心にズーム
+    const zoomFactor = e.deltaY < 0 ? 1.05 : 0.95;
+    const newScale = Math.min(3, Math.max(0.2, scale * zoomFactor));
+    // カーソルのキャンバス内座標を保持したままスケール変更
+    pan.x = e.clientX - (e.clientX - pan.x) * (newScale / scale);
+    pan.y = (e.clientY - 48) - ((e.clientY - 48) - pan.y) * (newScale / scale);
+    scale = newScale;
+  } else {
+    // 2本指スクロール＝パン
+    pan.x -= e.deltaX;
+    pan.y -= e.deltaY;
+  }
+  applyPan();
+}, { passive: false });
+
+// ════════════════════════════════════════════
+//  Node Operations
+// ════════════════════════════════════════════
+function addRootNode() {
+  const id = nextId++;
+  // Place near center of current viewport
+  const cx = (canvas.clientWidth  / 2) - pan.x - 60;
+  const cy = (canvas.clientHeight / 2) - pan.y - 20;
+  nodes[id] = { id, text: 'メインテーマ', parentId: null, children: [], x: cx, y: cy };
+  hideEmpty();
+  mountNode(nodes[id]);
+  drawConnections();
+  save();
+  setTimeout(() => startEdit(id), 30);
+}
+
+function addChild(parentId) {
+  const parent = nodes[parentId];
+  const id = nextId++;
+  const el = document.getElementById('node-' + parentId);
+  const w = el ? el.offsetWidth : 120;
+  const h = el ? el.offsetHeight : 40;
+  nodes[id] = {
+    id,
+    text: 'ノード',
+    parentId,
+    children: [],
+    x: parent.x + w + 80,
+    y: parent.y + parent.children.length * 70,
+  };
+  parent.children.push(id);
+  mountNode(nodes[id]);
+  drawConnections();
+  save();
+  setTimeout(() => startEdit(id), 30);
+}
+
+function deleteNode(id) {
+  function subtree(nid) {
+    const n = nodes[nid];
+    if (!n) return;
+    [...n.children].forEach(subtree);
+    delete nodes[nid];
+    document.getElementById('node-' + nid)?.remove();
+  }
+  const node = nodes[id];
+  if (!node) return;
+  if (node.parentId != null && nodes[node.parentId]) {
+    nodes[node.parentId].children = nodes[node.parentId].children.filter(c => c !== id);
+  }
+  subtree(id);
+  drawConnections();
+  save();
+  if (Object.keys(nodes).length === 0) showEmpty();
+}
+
+function clearAll() {
+  if (!confirm('すべてのノードを削除しますか？')) return;
+  nodes = {};
+  nextId = 1;
+  inner.querySelectorAll('.node').forEach(el => el.remove());
+  drawConnections();
+  showEmpty();
+  save();
+}
+
+// ════════════════════════════════════════════
+//  Editing
+// ════════════════════════════════════════════
+function startEdit(id) {
+  const node = nodes[id];
+  const el   = document.getElementById('node-' + id);
+  if (!node || !el) return;
+
+  const textEl = el.querySelector('.node-text');
+  if (!textEl) return;
+
+  const ta = document.createElement('textarea');
+  ta.className = 'node-edit';
+  ta.value = node.text;
+  ta.rows = 1;
+  ta.style.height = 'auto';
+
+  textEl.replaceWith(ta);
+  ta.focus();
+  ta.select();
+
+  function resize() {
+    ta.style.height = 'auto';
+    ta.style.height = ta.scrollHeight + 'px';
+  }
+  ta.addEventListener('input', resize);
+  resize();
+
+  function finish() {
+    node.text = ta.value.trim() || 'ノード';
+    const div = document.createElement('div');
+    div.className = 'node-text';
+    div.textContent = node.text;
+    ta.replaceWith(div);
+    drawConnections();
+    save();
+  }
+
+  ta.addEventListener('blur', finish);
+  ta.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); ta.blur(); }
+    if (e.key === 'Escape') { ta.blur(); }
+  });
+}
+
+// ════════════════════════════════════════════
+//  Render
+// ════════════════════════════════════════════
+function mountNode(node) {
+  const el = document.createElement('div');
+  el.className = 'node' + (node.parentId == null ? ' root' : '');
+  el.id = 'node-' + node.id;
+  el.style.left = node.x + 'px';
+  el.style.top  = node.y + 'px';
+
+  const text = document.createElement('div');
+  text.className = 'node-text';
+  text.textContent = node.text;
+
+  const actions = document.createElement('div');
+  actions.className = 'node-actions';
+
+  const btnAdd = document.createElement('button');
+  btnAdd.className = 'btn-add';
+  btnAdd.title = '子ノードを追加';
+  btnAdd.textContent = '+';
+  btnAdd.onmousedown = e => e.stopPropagation();
+  btnAdd.onclick = e => { e.stopPropagation(); addChild(node.id); };
+
+  const btnDel = document.createElement('button');
+  btnDel.className = 'btn-del';
+  btnDel.title = '削除';
+  btnDel.textContent = '×';
+  btnDel.onmousedown = e => e.stopPropagation();
+  btnDel.onclick = e => { e.stopPropagation(); deleteNode(node.id); };
+
+  actions.appendChild(btnAdd);
+  actions.appendChild(btnDel);
+  el.appendChild(text);
+  el.appendChild(actions);
+
+  // Drag
+  el.addEventListener('mousedown', e => {
+    if (e.target.tagName === 'BUTTON' || e.target.tagName === 'TEXTAREA') return;
+    e.stopPropagation();
+    drag = { nodeId: node.id, offsetX: (e.clientX - pan.x) / scale - node.x, offsetY: (e.clientY - pan.y) / scale - node.y };
+    el.classList.add('dragging');
+  });
+
+  // Double-click: edit
+  el.addEventListener('dblclick', e => {
+    if (e.target.tagName === 'BUTTON') return;
+    e.stopPropagation();
+    startEdit(node.id);
+  });
+
+  inner.appendChild(el);
+}
+
+function positionNode(id) {
+  const node = nodes[id];
+  const el   = document.getElementById('node-' + id);
+  if (el) { el.style.left = node.x + 'px'; el.style.top = node.y + 'px'; }
+}
+
+function drawConnections() {
+  svgLayer.innerHTML = '';
+  Object.values(nodes).forEach(node => {
+    if (node.parentId == null) return;
+    const parent = nodes[node.parentId];
+    if (!parent) return;
+
+    const pEl = document.getElementById('node-' + parent.id);
+    const cEl = document.getElementById('node-' + node.id);
+    if (!pEl || !cEl) return;
+
+    const px = parent.x + pEl.offsetWidth;
+    const py = parent.y + pEl.offsetHeight / 2;
+    const cx = node.x;
+    const cy = node.y + cEl.offsetHeight / 2;
+    const mx = (px + cx) / 2;
+
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', `M ${px + 2000} ${py + 2000} C ${mx + 2000} ${py + 2000}, ${mx + 2000} ${cy + 2000}, ${cx + 2000} ${cy + 2000}`);
+    path.setAttribute('stroke', '#c8c8c4');
+    path.setAttribute('stroke-width', '1.5');
+    path.setAttribute('fill', 'none');
+    svgLayer.appendChild(path);
+  });
+}
+
+// ════════════════════════════════════════════
+//  Auto Layout  (left → right)
+// ════════════════════════════════════════════
+function autoLayout() {
+  const H_GAP = 200, V_GAP = 24, NODE_H = 42;
+
+  function subtreeHeight(id) {
+    const n = nodes[id];
+    if (!n.children.length) return NODE_H;
+    return n.children.reduce((s, c) => s + subtreeHeight(c) + V_GAP, 0) - V_GAP;
+  }
+
+  function place(id, x, y) {
+    const node = nodes[id];
+    if (!node.children.length) {
+      node.x = x; node.y = y;
+      return;
+    }
+    const totalH = subtreeHeight(id);
+    node.x = x;
+    node.y = y + totalH / 2 - NODE_H / 2;
+    let cy = y;
+    node.children.forEach(cid => {
+      const ch = subtreeHeight(cid);
+      place(cid, x + H_GAP, cy + ch / 2 - NODE_H / 2);
+      cy += ch + V_GAP;
+    });
+  }
+
+  const roots = Object.values(nodes).filter(n => n.parentId == null);
+  let startY = 40;
+  roots.forEach(r => {
+    place(r.id, 40, startY);
+    startY += subtreeHeight(r.id) + 80;
+  });
+
+  Object.keys(nodes).forEach(id => positionNode(Number(id)));
+  drawConnections();
+  save();
+}
+
+// ════════════════════════════════════════════
+//  Empty State
+// ════════════════════════════════════════════
+function hideEmpty() { document.getElementById('empty-state').style.display = 'none'; }
+function showEmpty() { document.getElementById('empty-state').style.display = 'flex'; }
+
+// ════════════════════════════════════════════
+//  Persistence
+// ════════════════════════════════════════════
+function save() {
+  localStorage.setItem('logictree_v1', JSON.stringify({ nodes, nextId }));
+}
+
+function load() {
+  const raw = localStorage.getItem('logictree_v1');
+  if (!raw) return;
+  try {
+    const data = JSON.parse(raw);
+    nodes  = data.nodes  || {};
+    nextId = data.nextId || 1;
+    // Re-key as numbers
+    const rekey = {};
+    Object.values(nodes).forEach(n => {
+      n.id = Number(n.id);
+      n.parentId = n.parentId != null ? Number(n.parentId) : null;
+      n.children = (n.children || []).map(Number);
+      rekey[n.id] = n;
+    });
+    nodes = rekey;
+    if (Object.keys(nodes).length > 0) {
+      hideEmpty();
+      Object.values(nodes).forEach(n => mountNode(n));
+      drawConnections();
+    }
+  } catch(e) {
+    console.error('Load failed:', e);
+  }
+}
+
+// ════════════════════════════════════════════
+//  Init
+// ════════════════════════════════════════════
+applyPan();
+load();
+</script>
+</body>
+</html>
